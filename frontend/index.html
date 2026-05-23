@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predicție Precipitații București</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌧️ Estimare Precipitații</h1>
+            <p>Model AI Random Forest pentru București</p>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top: 0;">Mod Simulare Manuală</h3>
+            <div class="input-group">
+                <label for="month">Luna anului (1-12):</label>
+                <input type="number" id="month" min="1" max="12" value="5">
+            </div>
+            
+            <div class="input-row">
+                <div class="input-group">
+                    <label for="tmin">Temp. Minimă (°C):</label>
+                    <input type="number" id="tmin" value="12.0" step="0.5">
+                </div>
+                <div class="input-group">
+                    <label for="tmax">Temp. Maximă (°C):</label>
+                    <input type="number" id="tmax" value="24.0" step="0.5">
+                </div>
+            </div>
+
+            <button id="predictBtn">Calculează Precipitațiile</button>
+        </div>
+
+        <div class="result-card" id="resultCard">
+            <h2>Rezultat Estimat:</h2>
+            <div class="value" id="resultValue">-- mm</div>
+            <p id="weatherIcon">Aștept datele...</p>
+        </div>
+
+        <hr style="margin: 30px 0; border: 1px solid #ddd;">
+        <div class="header">
+            <h2>🌍 Prognoza Reală pe 7 Zile</h2>
+            <p>Preluăm temperaturile reale de pe internet și AI-ul estimează ploaia!</p>
+        </div>
+        <button id="liveForecastBtn" style="background-color: #27ae60;">Generează Prognoza Live AI</button>
+        
+        <div id="forecastContainer" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+            </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
