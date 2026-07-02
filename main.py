@@ -1,10 +1,10 @@
 import pandas as pd
 from datetime import datetime
-from src.data_loader import fetch_weather_data
-from src.data_cleaning import clean_raw_data
-from src.model_trainer import train_regression_model
+from backend.src.data_loader import fetch_weather_data
+from backend.src.data_cleaning import clean_raw_data
+from backend.src.model_trainer import train_regression_model
 
-# Coordonate București
+
 LAT, LON, ALT = 44.4268, 26.1025, 80
 
 # Perioada analizată

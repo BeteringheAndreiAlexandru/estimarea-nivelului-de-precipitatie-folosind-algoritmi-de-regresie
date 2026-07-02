@@ -2,148 +2,141 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, r2_score
 import requests
 from datetime import datetime
+import custom_rf  
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-ORASE_COORDONATE = {
-    "București": {"lat": 44.4268, "lon": 26.1025},
-    "Cluj-Napoca": {"lat": 46.7712, "lon": 23.5901},
+ORASE = {
+    "București": {"lat": 44.4323, "lon": 26.1063},
+    "Cluj-Napoca": {"lat": 46.7712, "lon": 23.6236},
     "Timișoara": {"lat": 45.7489, "lon": 21.2087},
     "Iași": {"lat": 47.1585, "lon": 27.6014},
     "Constanța": {"lat": 44.1792, "lon": 28.6498},
     "Brașov": {"lat": 45.6427, "lon": 25.5887}
 }
 
-# --- 1. ANTRENAREA ȘI OPTIMIZAREA MODELULUI ---
-print("Se inițializează antrenarea modelului...")
-try:
-    df = pd.read_csv("data/processed/weather_clean.csv")
-    features_ideale = ['month', 'tavg', 'tmin', 'tmax']
-    active_features = [col for col in features_ideale if col in df.columns]
-    target = 'prcp'
+model_cpp = None
 
-    df = df.dropna(subset=active_features + [target])
-    X = df[active_features]
-    y = df[target]
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    # AI OPTIMIZAT (Hyperparameter Tuning)
-    model = RandomForestRegressor(
-        n_estimators=200,       # 200 de arbori in loc de 100 pentru o decizie mai stabila
-        max_depth=10,           # Previne supraspecializarea (overfitting)
-        min_samples_split=5,    # Regula mai stricta pentru crearea noilor frunze
-        random_state=42
-    )
-    model.fit(X_train, y_train)
-    
-    # Calcularea metodelor de evaluare pentru Licență
-    predictii_test = model.predict(X_test)
-    mae = mean_absolute_error(y_test, predictii_test)
-    r2 = r2_score(y_test, predictii_test)
-    
-    print(f"✅ Modelul a învățat din {len(df)} zile folosind: {active_features}")
-    print(f"📊 PERFORMANȚĂ MODEL: Eroare medie (MAE): {mae:.2f} mm | Scorul R²: {r2:.2f}")
-except Exception as e:
-    print(f"❌ EROARE la încărcarea datelor: {e}")
-
-class WeatherData(BaseModel):
+class WeatherInput(BaseModel):
     month: int
     tavg: float
     tmin: float
     tmax: float
+    humidity: float
+    pressure: float
 
-# --- 3. RUTA PENTRU PREDICȚIE MANUALĂ ---
-@app.post("/predict")
-def predict_manual(data: WeatherData):
-    input_dict = {
-        'month': [data.month],
-        'tavg': [data.tavg],
-        'tmin': [data.tmin],
-        'tmax': [data.tmax]
-    }
-    input_df = pd.DataFrame(input_dict)[active_features]
-    raw_prediction = model.predict(input_df)[0]
-    final_prediction = float(max(0, round(raw_prediction, 2)))
-    return {"estimated_precipitation_mm": final_prediction}
-
-# --- 4. RUTA PENTRU PROGNOZA LIVE PE 7 ZILE ---
-@app.get("/forecast-7-days")
-def get_live_forecast(oras: str = "București"):
-    if oras not in ORASE_COORDONATE:
-        return {"error": "Orașul nu este suportat."}
+@app.on_event("startup")
+def startup_event():
+    global model_cpp
+    print("\n====== PORNIRE SERVER ======")
+    print("1. Incarcam datele istorice...")
+    
+    try:
+        df = pd.read_csv("data/processed/weather_clean.csv")
+        X = df[['month', 'tavg', 'tmin', 'tmax', 'humidity', 'pressure']].values.tolist()
         
-    lat = ORASE_COORDONATE[oras]["lat"]
-    lon = ORASE_COORDONATE[oras]["lon"]
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min&hourly=temperature_2m&timezone=auto"
+        col_tinta = 'precipitation' if 'precipitation' in df.columns else df.columns[-1]
+        y = df[col_tinta].values.tolist()
+        
+        print("2. Antrenam motorul C++ Custom Random Forest...")
+        model_cpp = custom_rf.CustomRandomForest(n_estimators=15, max_depth=10)
+        model_cpp.fit(X, y)
+        print("3. Model antrenat si gata de actiune!\n============================")
+        
+    except Exception as e:
+        print(f"ATENTIE: Eroare la incarcarea fisierului CSV: {e}")
+
+@app.post("/predict")
+def predict_weather(data: WeatherInput):
+    input_data = [[data.month, data.tavg, data.tmin, data.tmax, data.humidity, data.pressure]]
+    prediction = model_cpp.predict(input_data)[0]
+    result = max(0.0, round(prediction, 2))
+    return {"estimated_precipitation_mm": result}
+
+@app.get("/forecast-7-days")
+def get_live_forecast(oras: str):
+    if oras not in ORASE:
+        return {"error": "Orașul nu există în baza de date."}
+        
+    lat = ORASE[oras]["lat"]
+    lon = ORASE[oras]["lon"]
+    
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,relative_humidity_2m,surface_pressure&timezone=auto"
     
     try:
         response = requests.get(url)
-        if response.status_code != 200:
-            return {"error": "Nu s-au putut prelua datele de la Open-Meteo."}
-            
-        meteo_json = response.json()
-        daily = meteo_json['daily']
-        hourly = meteo_json['hourly']
+        data = response.json()
         
-        rezultate_7_zile = []
-        for i in range(len(daily['time'])):
-            data_calendar = daily['time'][i]
-            tmin = daily['temperature_2m_min'][i]
-            tmax = daily['temperature_2m_max'][i]
-            luna = datetime.strptime(data_calendar, "%Y-%m-%d").month
+        ore = data["hourly"]["time"]
+        temperaturi = data["hourly"]["temperature_2m"]
+        umiditati = data["hourly"]["relative_humidity_2m"]
+        presiuni = data["hourly"]["surface_pressure"]
+        
+        zile_dict = {}
+        for i in range(len(ore)):
+            data_zi = ore[i].split("T")[0]
+            ora_exacta = ore[i].split("T")[1]
+            t = temperaturi[i]
+            h = umiditati[i]
+            p = presiuni[i]
             
-            start_idx = i * 24
-            end_idx = start_idx + 24
-            ore_brute = hourly['time'][start_idx:end_idx]
-            temp_ore = hourly['temperature_2m'][start_idx:end_idx]
-            ore_formatate = [ora[-5:] for ora in ore_brute]
+            if data_zi not in zile_dict:
+                zile_dict[data_zi] = {
+                    "t_list": [], "h_list": [], "p_list": [],
+                    "ore_list": [], "temp_grafic": []
+                }
+            
+            zile_dict[data_zi]["t_list"].append(t)
+            zile_dict[data_zi]["h_list"].append(h)
+            zile_dict[data_zi]["p_list"].append(p)
+            zile_dict[data_zi]["ore_list"].append(ora_exacta)
+            zile_dict[data_zi]["temp_grafic"].append(t)
 
-            input_row = {
-                'month': [luna],
-                'tavg': [(tmin + tmax) / 2],
-                'tmin': [tmin],
-                'tmax': [tmax]
-            }
-            input_df = pd.DataFrame(input_row)[active_features]
-            pred_ai = float(max(0, round(model.predict(input_df)[0], 2)))
+        prognoza_finala = []
+        for data_zi, valori in list(zile_dict.items())[:7]:
+            tmin = min(valori["t_list"])
+            tmax = max(valori["t_list"])
+            tavg = sum(valori["t_list"]) / len(valori["t_list"])
+            h_avg = sum(valori["h_list"]) / len(valori["h_list"])
+            p_avg = sum(valori["p_list"]) / len(valori["p_list"])
+            luna = int(data_zi.split("-")[1])
             
-            rezultate_7_zile.append({
-                "data": data_calendar,
-                "tmin": tmin,
-                "tmax": tmax,
-                "ploaie_estimata_mm": pred_ai,
-                "grafic_ore": ore_formatate,
-                "grafic_temperaturi": temp_ore
+            input_cpp = [[luna, tavg, tmin, tmax, h_avg, p_avg]]
+            pred_mm = model_cpp.predict(input_cpp)[0]
+            
+            prognoza_finala.append({
+                "data": data_zi,
+                "tmin": round(tmin, 1),
+                "tmax": round(tmax, 1),
+                "ploaie_estimata_mm": max(0.0, round(pred_mm, 2)),
+                "grafic_ore": valori["ore_list"],
+                "grafic_temperaturi": valori["temp_grafic"]
             })
             
-        return {"prognoza": rezultate_7_zile}
-    except Exception as e:
-        return {"error": f"Problemă tehnică: {str(e)}"}
-
-# --- 5. RUTA PENTRU XAI (TRANSPARENȚA MODELULUI) ---
-@app.get("/feature-importance")
-def get_feature_importance():
-    try:
-        importances = model.feature_importances_
-        importance_dict = {
-            feature: float(round(imp * 100, 2)) 
-            for feature, imp in zip(active_features, importances)
-        }
-        return importance_dict
+        return {"prognoza": prognoza_finala}
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/feature-importance")
+def get_feature_importance():
+    # 🌟 NOU: Cerem procentele de la modelul C++ compilat
+    importances = model_cpp.get_feature_importances()
+    
+    # Mapăm scorurile la coloanele noastre în ordinea exactă în care le-am trimis la antrenare
+    return {
+        "month": round(importances[0], 2),
+        "tavg": round(importances[1], 2),
+        "tmin": round(importances[2], 2),
+        "tmax": round(importances[3], 2),
+        "humidity": round(importances[4], 2),
+        "pressure": round(importances[5], 2)
+    }

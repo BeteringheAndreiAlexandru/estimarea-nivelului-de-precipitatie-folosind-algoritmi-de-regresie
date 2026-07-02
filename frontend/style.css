@@ -83,7 +83,7 @@ button:hover {
     padding: 20px;
     border-radius: 12px;
     text-align: center;
-    display: none; /* Ascuns până apăsăm butonul */
+    display: none;
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
@@ -91,4 +91,72 @@ button:hover {
     font-size: 2.5em;
     font-weight: bold;
     margin: 10px 0;
+}
+
+.btn-grafic {
+    background-color: #f39c12;
+    padding: 6px 12px;
+    font-size: 0.85em;
+    margin-top: 10px;
+    width: auto;
+    border-radius: 4px;
+}
+.btn-grafic:hover {
+    background-color: #e67e22;
+}
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 600px;
+    text-align: center;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.btn-inchide {
+    background-color: #e74c3c;
+    margin-top: 20px;
+    width: auto;
+    padding: 8px 20px;
+}
+.btn-inchide:hover {
+    background-color: #c0392b;
+}
+
+/* =========================================
+   🔄 ANIMATIA DE INCARCARE (SPINNER)
+   ========================================= */
+.loader-container {
+    display: none; 
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.spinner {
+    width: 45px;
+    height: 45px;
+    border: 5px solid #e8f4f8; 
+    border-top: 5px solid #3498db; 
+    border-radius: 50%; 
+    animation: spin 1s linear infinite; 
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
